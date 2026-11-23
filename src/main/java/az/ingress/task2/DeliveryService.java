@@ -1,13 +1,18 @@
 package az.ingress.task2;
+/*Factory Pattern*/
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.RecursiveTask;
+
+import static az.ingress.task2.DeliveryService.DeliveryType.*;
 
 /**
  * Sifarişin çatdırılma qiymətinin hesablanması.
  */
 public class DeliveryService {
 
-    record Order(String customer, double total, double weightKg, String deliveryType) {
+    record Order(String customer, double total, double weightKg, DeliveryType deliveryType) {
     }
 
     /*
@@ -19,36 +24,105 @@ public class DeliveryService {
      *  4. Növ API-dən String kimi gəlir. String-ə görə növü seçmək bir yerdə olsun.
      *     Naməlum növ -> "Unknown delivery type: X"
      */
+
+    interface DeliveryStrategy {
+        double price(Order order);
+        int days();
+        String label();
+    }
+
+
+    static class CourierDelivery implements DeliveryStrategy {
+        public double price(Order o) { return o.total() >= 100 ? 0 : 5 + o.weightKg() * 0.5; }
+        public int days()            { return 2; }
+        public String label()        { return "Courier"; }
+    }
+
+    static class PickupDelivery implements DeliveryStrategy {
+        public double price(Order o) { return 2; }
+        public int days()            { return 3; }
+        public String label()        { return "Pickup point"; }
+    }
+
+    static class ExpressDelivery implements DeliveryStrategy {
+        public double price(Order o) { return 10 + o.weightKg(); }
+        public int days()            { return 1; }
+        public String label()        { return "Express"; }
+    }
+
+    static class SameDayDelivery implements DeliveryStrategy {
+        public double price(Order o) { return 15; }
+        public int days()            { return 0; }
+        public String label()        { return "Same day"; }
+    }
+
+    static class LockerDelivery implements DeliveryStrategy {
+        public double price(Order o) { return o.total() >= 50 ? 0 : 3; }
+        public int days()            { return 2; }
+        public String label()        { return "Parcel locker"; }
+    }
+
+
+
+    static class DeliveryStrategyFactory {
+        private static final Map< DeliveryType, DeliveryStrategy> STRATEGIES = Map.of(
+                COURIER,  new CourierDelivery(),
+                PICKUP,   new PickupDelivery(),
+                EXPRESS,  new ExpressDelivery(),
+                SAME_DAY, new SameDayDelivery(),
+                LOCKER,   new LockerDelivery()
+        );
+
+        static DeliveryStrategy get(String type) {
+            DeliveryStrategy strategy = type == null ? null : STRATEGIES.get(type);
+            if (strategy == null) {
+                throw new IllegalArgumentException("Unknown delivery type: " + type);
+            }
+            return strategy;
+        }
+    }
+
+
+    enum DeliveryType{
+        COURIER,
+        PICKUP,
+        EXPRESS,
+        SAME_DAY,
+        LOCKER
+    }
+
+
     public double price(Order order) {
         switch (order.deliveryType()) {
-            case "COURIER":
+            case COURIER:
                 if (order.total() >= 100) {
                     return 0;
                 }
                 return 5 + order.weightKg() * 0.5;
-            case "PICKUP":
+            case PICKUP:
                 return 2;
-            case "EXPRESS":
+            case EXPRESS:
                 return 10 + order.weightKg();
             default:
                 throw new IllegalArgumentException("Unknown delivery type: " + order.deliveryType());
         }
     }
 
-    enum DeliveryType{
-        COURIER,
-        PICKUP,
-        EXPRESS
-    }
 
     public int days(Order order) {
         switch (order.deliveryType()) {
-            case "COURIER":
+            case COURIER:
                 return 2;
-            case "PICKUP":
+            case PICKUP:
                 return 3;
-            case "EXPRESS":
+            case EXPRESS:
                 return 1;
+            case SAME_DAY:
+                return 0;
+            case LOCKER:
+                if (order.total>=50) {return 0;}
+                else {return 2;}
+
             default:
                 throw new IllegalArgumentException("Unknown delivery type: " + order.deliveryType());
         }
@@ -56,12 +130,16 @@ public class DeliveryService {
 
     public String label(Order order) {
         switch (order.deliveryType()) {
-            case "COURIER":
+            case COURIER:
                 return "Courier";
-            case "PICKUP":
+            case PICKUP:
                 return "Pickup point";
-            case "EXPRESS":
+            case EXPRESS:
                 return "Express";
+            case SAME_DAY:
+                return "Same day";
+            case LOCKER:
+                return "Locker";
             default:
                 throw new IllegalArgumentException("Unknown delivery type: " + order.deliveryType());
         }
@@ -76,18 +154,15 @@ public class DeliveryService {
         DeliveryService service = new DeliveryService();
 
         List<Order> orders = List.of(
-                new Order("Aysel", 120, 3, "COURIER"),  // Courier, 0.00 AZN, 2 day(s)
-                new Order("Murad", 40, 2, "COURIER"),   // Courier, 6.00 AZN, 2 day(s)
-                new Order("Leyla", 30, 1, "PICKUP"),    // Pickup point, 2.00 AZN, 3 day(s)
-                new Order("Kamran", 80, 4, "EXPRESS")   // Express, 14.00 AZN, 1 day(s)
+                new Order("Aysel", 120, 3, COURIER),
+                new Order("Murad", 40, 2, COURIER),
+                new Order("Leyla", 30, 1, PICKUP),
+                new Order("Kamran", 80, 4, EXPRESS),
+                new Order("Nigar", 60, 1, SAME_DAY),
+                new Order("Rashad", 70, 2, LOCKER),
+                new Order("Elvin", 20, 1, LOCKER),
+                new Order("Farid", 50, 1, SAME_DAY)
         );
-
-        // TODO: yeni növlər hazır olanda bu sifarişləri siyahıya əlavə et:
-        //   Nigar,  60, 1 kq, SAME_DAY -> Same day, 15.00 AZN, 0 day(s)
-        //   Rashad, 70, 2 kq, LOCKER   -> Parcel locker, 0.00 AZN, 2 day(s)
-        //   Elvin,  20, 1 kq, LOCKER   -> Parcel locker, 3.00 AZN, 2 day(s)
-        //   Farid,  50, 1 kq, DRONE    -> Unknown delivery type: DRONE
-        // Yuxarıdakı 4 sifarişin nəticəsi dəyişməməlidir.
 
         for (Order order : orders) {
             try {
