@@ -35,6 +35,12 @@ public class DeliveryService {
         }
     }
 
+    enum DeliveryType{
+        COURIER,
+        PICKUP,
+        EXPRESS
+    }
+
     public int days(Order order) {
         switch (order.deliveryType()) {
             case "COURIER":
